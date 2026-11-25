@@ -1,4 +1,3 @@
-
 local Workspace = game:GetService("Workspace")
 local Manager = getgenv().JOSHZZ_SHARED_EFFECT_MANAGER
 
@@ -9,49 +8,65 @@ end
 local Owner = {}
 local Enabled = false
 local Connections = {}
+local Processed = {}
 
-local function ProcessEffect(Effect)
-    if not Enabled or not Effect:IsA("MeshPart") then
+local TextureProperties = {
+    "TextureID"
+}
+
+local function ProcessMesh(Mesh)
+    if not Enabled or not Mesh:IsA("MeshPart") then
         return
     end
 
-    if not Connections[Effect] then
-        Connections[Effect] = Effect:GetPropertyChangedSignal("CastShadow"):Connect(function()
-            if Enabled and Effect.CastShadow then
-                Manager.Claim(Owner, Effect, "CastShadow", false)
-            end
-        end)
+    if Processed[Mesh] then
+        return
     end
 
-    if Effect.CastShadow then
-        Manager.Claim(Owner, Effect, "CastShadow", false)
+    Processed[Mesh] = true
+
+    for _, Property in ipairs(TextureProperties) do
+        local Success, Value = pcall(function()
+            return Mesh[Property]
+        end)
+
+        if Success and Value ~= "" then
+            Manager.Claim(Owner, Mesh, Property, "")
+        end
     end
+
+    Connections[Mesh] = Mesh:GetPropertyChangedSignal("TextureID"):Connect(function()
+        if Enabled and Mesh.TextureID ~= "" then
+            Manager.Claim(Owner, Mesh, "TextureID", "")
+        end
+    end)
 end
 
 local function Scan()
-    for _, Effect in ipairs(Workspace:GetDescendants()) do
-        ProcessEffect(Effect)
+    for _, Object in ipairs(Workspace:GetDescendants()) do
+        ProcessMesh(Object)
     end
 end
 
-local function SetMeshOptimizer(State)
+local function SetMeshTextureOptimizer(State)
     Enabled = State == true
 
     if Enabled then
         Scan()
     else
-        for Effect, Connection in pairs(Connections) do
+        for Mesh, Connection in pairs(Connections) do
             Connection:Disconnect()
-            Connections[Effect] = nil
+            Connections[Mesh] = nil
         end
 
+        table.clear(Processed)
         Manager.ReleaseOwner(Owner)
     end
 end
 
-Workspace.DescendantAdded:Connect(function(Effect)
+Workspace.DescendantAdded:Connect(function(Object)
     if Enabled then
-        ProcessEffect(Effect)
+        ProcessMesh(Object)
     end
 end)
 
@@ -65,4 +80,4 @@ task.spawn(function()
     end
 end)
 
-return SetMeshOptimizer
+return SetMeshTextureOptimizer
