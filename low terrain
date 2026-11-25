@@ -1,0 +1,56 @@
+
+local Terrain = workspace.Terrain
+
+local Enabled = false
+
+local SavedStates = {
+    WaterWaveSize = nil,
+    WaterWaveSpeed = nil,
+    WaterReflectance = nil
+}
+
+local Connections = {}
+
+local function Apply()
+    if not Enabled then return end
+
+    Terrain.WaterWaveSize = 0
+    Terrain.WaterWaveSpeed = 0
+    Terrain.WaterReflectance = 0
+end
+
+local function SetLowTerrain(state)
+    Enabled = state == true
+
+    if Enabled then
+        if SavedStates.WaterWaveSize == nil then
+            SavedStates.WaterWaveSize = Terrain.WaterWaveSize
+            SavedStates.WaterWaveSpeed = Terrain.WaterWaveSpeed
+            SavedStates.WaterReflectance = Terrain.WaterReflectance
+        end
+
+        Apply()
+
+        if not Connections.WaveSize then
+            Connections.WaveSize = Terrain:GetPropertyChangedSignal("WaterWaveSize"):Connect(Apply)
+            Connections.WaveSpeed = Terrain:GetPropertyChangedSignal("WaterWaveSpeed"):Connect(Apply)
+            Connections.Reflectance = Terrain:GetPropertyChangedSignal("WaterReflectance"):Connect(Apply)
+        end
+    else
+        for _, connection in pairs(Connections) do
+            connection:Disconnect()
+        end
+
+        table.clear(Connections)
+
+        if SavedStates.WaterWaveSize ~= nil then
+            Terrain.WaterWaveSize = SavedStates.WaterWaveSize
+            Terrain.WaterWaveSpeed = SavedStates.WaterWaveSpeed
+            Terrain.WaterReflectance = SavedStates.WaterReflectance
+
+            table.clear(SavedStates)
+        end
+    end
+end
+
+return SetLowTerrain

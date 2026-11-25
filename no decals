@@ -1,0 +1,57 @@
+
+local Workspace = game:GetService("Workspace")
+
+local Enabled = false
+local SavedStates = {}
+local Connections = {}
+
+local function ProcessEffect(effect)
+    if not (effect:IsA("Decal") or effect:IsA("Texture")) then
+        return
+    end
+
+    if SavedStates[effect] == nil then
+        SavedStates[effect] = effect.Transparency
+    end
+
+    effect.Transparency = 1
+
+    if not Connections[effect] then
+        Connections[effect] = effect:GetPropertyChangedSignal("Transparency"):Connect(function()
+            if Enabled and effect.Transparency ~= 1 then
+                effect.Transparency = 1
+            end
+        end)
+    end
+end
+
+local function SetNoDecals(state)
+    Enabled = state == true
+
+    if Enabled then
+        for _, effect in ipairs(Workspace:GetDescendants()) do
+            ProcessEffect(effect)
+        end
+    else
+        for effect, connection in pairs(Connections) do
+            connection:Disconnect()
+            Connections[effect] = nil
+        end
+
+        for effect, originalState in pairs(SavedStates) do
+            if effect.Parent then
+                effect.Transparency = originalState
+            end
+
+            SavedStates[effect] = nil
+        end
+    end
+end
+
+Workspace.DescendantAdded:Connect(function(effect)
+    if Enabled then
+        ProcessEffect(effect)
+    end
+end)
+
+return SetNoDecals

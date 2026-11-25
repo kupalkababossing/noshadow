@@ -1,0 +1,50 @@
+
+local Lighting = game:GetService("Lighting")
+
+local Enabled = false
+local SavedStates = {
+    FogStart = nil,
+    FogEnd = nil
+}
+
+local Connections = {}
+
+local function Apply()
+    if not Enabled then return end
+
+    Lighting.FogStart = 0
+    Lighting.FogEnd = 1000000
+end
+
+local function SetNoFog(state)
+    Enabled = state == true
+
+    if Enabled then
+        if SavedStates.FogStart == nil then
+            SavedStates.FogStart = Lighting.FogStart
+            SavedStates.FogEnd = Lighting.FogEnd
+        end
+
+        Apply()
+
+        if not Connections.FogStart then
+            Connections.FogStart = Lighting:GetPropertyChangedSignal("FogStart"):Connect(Apply)
+            Connections.FogEnd = Lighting:GetPropertyChangedSignal("FogEnd"):Connect(Apply)
+        end
+    else
+        for _, connection in pairs(Connections) do
+            connection:Disconnect()
+        end
+
+        table.clear(Connections)
+
+        if SavedStates.FogStart ~= nil then
+            Lighting.FogStart = SavedStates.FogStart
+            Lighting.FogEnd = SavedStates.FogEnd
+
+            table.clear(SavedStates)
+        end
+    end
+end
+
+return SetNoFog

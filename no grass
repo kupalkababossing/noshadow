@@ -1,0 +1,38 @@
+
+local Terrain = workspace.Terrain
+
+local Enabled = false
+local SavedState = nil
+local Connection = nil
+
+local function SetNoGrass(state)
+    Enabled = state == true
+
+    if Enabled then
+        if SavedState == nil then
+            SavedState = Terrain.Decoration
+        end
+
+        Terrain.Decoration = false
+
+        if not Connection then
+            Connection = Terrain:GetPropertyChangedSignal("Decoration"):Connect(function()
+                if Enabled and Terrain.Decoration then
+                    Terrain.Decoration = false
+                end
+            end)
+        end
+    else
+        if Connection then
+            Connection:Disconnect()
+            Connection = nil
+        end
+
+        if SavedState ~= nil then
+            Terrain.Decoration = SavedState
+            SavedState = nil
+        end
+    end
+end
+
+return SetNoGrass
