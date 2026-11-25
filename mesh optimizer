@@ -1,5 +1,10 @@
+
 local Workspace = game:GetService("Workspace")
-local Manager = getgenv().JOSHZZ_EFFECT_MANAGER
+local Manager = getgenv().JOSHZZ_SHARED_EFFECT_MANAGER
+
+if not Manager then
+    error("JOSHZZ SharedEffectManager is not initialized")
+end
 
 local Owner = {}
 local Enabled = false
