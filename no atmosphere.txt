@@ -1,0 +1,82 @@
+
+--====================================================
+-- JOSHZZ FEATURE | NO ATMOSPHERE
+-- PERSISTENT | ON/OFF | REMOTE READY
+--====================================================
+
+local Lighting = game:GetService("Lighting")
+
+local Enabled = false
+local SavedParents = {}
+local Processing = {}
+
+local function ProcessEffect(effect)
+
+    if not effect:IsA("Atmosphere") then
+        return
+    end
+
+    if SavedParents[effect] == nil then
+        SavedParents[effect] = effect.Parent
+    end
+
+    if effect.Parent then
+        Processing[effect] = true
+        effect.Parent = nil
+        Processing[effect] = nil
+    end
+
+end
+
+local function SetNoAtmosphere(state)
+
+    Enabled = state == true
+
+    if Enabled then
+
+        for _, effect in ipairs(Lighting:GetDescendants()) do
+            ProcessEffect(effect)
+        end
+
+    else
+
+        for effect, originalParent in pairs(SavedParents) do
+
+            if effect and not effect.Parent and originalParent then
+                effect.Parent = originalParent
+            end
+
+            SavedParents[effect] = nil
+
+        end
+
+    end
+
+end
+
+Lighting.DescendantAdded:Connect(function(effect)
+
+    if Enabled and not Processing[effect] then
+        ProcessEffect(effect)
+    end
+
+end)
+
+-- Detect Atmosphere objects reinserted into Lighting
+task.spawn(function()
+
+    while true do
+
+        if Enabled then
+            for _, effect in ipairs(Lighting:GetDescendants()) do
+                ProcessEffect(effect)
+            end
+        end
+
+        task.wait(1)
+
+    end
+
+end)
+
+return SetNoAtmosphere
