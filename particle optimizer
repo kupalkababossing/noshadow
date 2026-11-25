@@ -1,5 +1,5 @@
 local Workspace = game:GetService("Workspace")
-local Manager = getgenv().JOSHZZ_EFFECT_MANAGER
+local Manager = getgenv().JOSHZZ_SHARED_EFFECT_MANAGER
 
 local Owner = {}
 local Enabled = false
