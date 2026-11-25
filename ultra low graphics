@@ -1,0 +1,101 @@
+
+local Lighting = game:GetService("Lighting")
+local Workspace = game:GetService("Workspace")
+
+local Manager = getgenv().JOSHZZ_SHARED_EFFECT_MANAGER
+assert(Manager, "JOSHZZ_SHARED_EFFECT_MANAGER not found")
+
+local Owner = "UltraLowGraphics"
+local Active = false
+local Connections = {}
+local Processed = {}
+
+local function Claim(Object, Property, Value)
+    if not Object or not Object.Parent then
+        return
+    end
+
+    Processed[Object] = Processed[Object] or {}
+
+    if Processed[Object][Property] then
+        return
+    end
+
+    Processed[Object][Property] = true
+    Manager:Claim(Owner, Object, Property, Value)
+end
+
+local function Apply(Object)
+    if not Active or not Object then
+        return
+    end
+
+    if Object:IsA("Terrain") then
+        Claim(Object, "Decoration", false)
+        Claim(Object, "WaterWaveSize", 0)
+        Claim(Object, "WaterWaveSpeed", 0)
+        Claim(Object, "WaterReflectance", 0)
+        Claim(Object, "WaterTransparency", 1)
+    elseif Object:IsA("PostEffect") then
+        Claim(Object, "Enabled", false)
+    elseif Object:IsA("ParticleEmitter")
+        or Object:IsA("Trail")
+        or Object:IsA("Beam")
+        or Object:IsA("Fire")
+        or Object:IsA("Smoke")
+        or Object:IsA("Sparkles") then
+        Claim(Object, "Enabled", false)
+    elseif Object:IsA("Decal") or Object:IsA("Texture") then
+        Claim(Object, "Transparency", 1)
+    elseif Object:IsA("MeshPart") then
+        Claim(Object, "TextureID", "")
+    elseif Object:IsA("PointLight")
+        or Object:IsA("SpotLight")
+        or Object:IsA("SurfaceLight") then
+        Claim(Object, "Enabled", false)
+    end
+end
+
+local function Disconnect()
+    for _, Connection in ipairs(Connections) do
+        Connection:Disconnect()
+    end
+
+    table.clear(Connections)
+end
+
+local function Disable()
+    Active = false
+    Disconnect()
+    Manager:ReleaseOwner(Owner)
+    table.clear(Processed)
+end
+
+local function Enable()
+    Disable()
+    Active = true
+
+    Claim(Lighting, "GlobalShadows", false)
+    Claim(Lighting, "EnvironmentDiffuseScale", 0)
+    Claim(Lighting, "EnvironmentSpecularScale", 0)
+    Claim(Lighting, "Brightness", 1)
+
+    for _, Object in ipairs(Workspace:GetDescendants()) do
+        Apply(Object)
+    end
+
+    for _, Object in ipairs(Lighting:GetDescendants()) do
+        Apply(Object)
+    end
+
+    table.insert(Connections, Workspace.DescendantAdded:Connect(Apply))
+    table.insert(Connections, Lighting.DescendantAdded:Connect(Apply))
+end
+
+return function(State)
+    if State then
+        Enable()
+    else
+        Disable()
+    end
+end
