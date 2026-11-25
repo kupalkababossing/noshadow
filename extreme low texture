@@ -1,0 +1,104 @@
+
+local Workspace = game:GetService("Workspace")
+
+local Manager = getgenv().JOSHZZ_SHARED_EFFECT_MANAGER
+assert(Manager, "JOSHZZ_SHARED_EFFECT_MANAGER not found")
+
+local Owner = "ExtremeLowTextureQuality"
+local Active = false
+local Connections = {}
+local Processed = {}
+
+local function Claim(Object, Property, Value)
+    if not Object or not Object.Parent then
+        return
+    end
+
+    Processed[Object] = Processed[Object] or {}
+
+    if Processed[Object][Property] then
+        return
+    end
+
+    local Success = pcall(function()
+        Manager:Claim(Owner, Object, Property, Value)
+    end)
+
+    if Success then
+        Processed[Object][Property] = true
+    end
+end
+
+local function Apply(Object)
+    if not Active then
+        return
+    end
+
+    if Object:IsA("MeshPart") then
+        Claim(Object, "TextureID", "")
+        Claim(Object, "Reflectance", 0)
+        Claim(Object, "CastShadow", false)
+
+    elseif Object:IsA("SpecialMesh") then
+        Claim(Object, "TextureId", "")
+
+    elseif Object:IsA("Decal") or Object:IsA("Texture") then
+        Claim(Object, "Transparency", 1)
+
+    elseif Object:IsA("SurfaceAppearance") then
+        Claim(Object, "ColorMap", "")
+        Claim(Object, "NormalMap", "")
+        Claim(Object, "RoughnessMap", "")
+        Claim(Object, "MetalnessMap", "")
+
+    elseif Object:IsA("Shirt") then
+        Claim(Object, "ShirtTemplate", "")
+
+    elseif Object:IsA("Pants") then
+        Claim(Object, "PantsTemplate", "")
+
+    elseif Object:IsA("ShirtGraphic") then
+        Claim(Object, "Graphic", "")
+
+    elseif Object:IsA("BasePart") then
+        Claim(Object, "Material", Enum.Material.Plastic)
+        Claim(Object, "Reflectance", 0)
+        Claim(Object, "CastShadow", false)
+    end
+end
+
+local function Disconnect()
+    for _, Connection in ipairs(Connections) do
+        pcall(function()
+            Connection:Disconnect()
+        end)
+    end
+
+    table.clear(Connections)
+end
+
+local function Disable()
+    Active = false
+    Disconnect()
+    Manager:ReleaseOwner(Owner)
+    table.clear(Processed)
+end
+
+local function Enable()
+    Disable()
+    Active = true
+
+    for _, Object in ipairs(Workspace:GetDescendants()) do
+        Apply(Object)
+    end
+
+    table.insert(Connections, Workspace.DescendantAdded:Connect(Apply))
+end
+
+return function(State)
+    if State then
+        Enable()
+    else
+        Disable()
+    end
+end
