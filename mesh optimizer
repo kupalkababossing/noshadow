@@ -1,0 +1,68 @@
+
+local Workspace = game:GetService("Workspace")
+local Manager = getgenv().JOSHZZ_SHARED_EFFECT_MANAGER
+
+if not Manager then
+    error("JOSHZZ SharedEffectManager is not initialized")
+end
+
+local Owner = {}
+local Enabled = false
+local Connections = {}
+
+local function ProcessEffect(Effect)
+    if not Enabled or not Effect:IsA("MeshPart") then
+        return
+    end
+
+    if not Connections[Effect] then
+        Connections[Effect] = Effect:GetPropertyChangedSignal("CastShadow"):Connect(function()
+            if Enabled and Effect.CastShadow then
+                Manager.Claim(Owner, Effect, "CastShadow", false)
+            end
+        end)
+    end
+
+    if Effect.CastShadow then
+        Manager.Claim(Owner, Effect, "CastShadow", false)
+    end
+end
+
+local function Scan()
+    for _, Effect in ipairs(Workspace:GetDescendants()) do
+        ProcessEffect(Effect)
+    end
+end
+
+local function SetMeshOptimizer(State)
+    Enabled = State == true
+
+    if Enabled then
+        Scan()
+    else
+        for Effect, Connection in pairs(Connections) do
+            Connection:Disconnect()
+            Connections[Effect] = nil
+        end
+
+        Manager.ReleaseOwner(Owner)
+    end
+end
+
+Workspace.DescendantAdded:Connect(function(Effect)
+    if Enabled then
+        ProcessEffect(Effect)
+    end
+end)
+
+task.spawn(function()
+    while true do
+        task.wait(2)
+
+        if Enabled then
+            Scan()
+        end
+    end
+end)
+
+return SetMeshOptimizer

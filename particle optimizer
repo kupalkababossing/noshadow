@@ -1,0 +1,76 @@
+
+local Workspace = game:GetService("Workspace")
+local Manager = getgenv().JOSHZZ_SHARED_EFFECT_MANAGER
+
+if not Manager then
+    error("JOSHZZ SharedEffectManager is not initialized")
+end
+
+local Owner = {}
+local Enabled = false
+local Connections = {}
+
+local EffectTypes = {
+    ParticleEmitter = true,
+    Trail = true,
+    Beam = true,
+    Fire = true,
+    Sparkles = true
+}
+
+local function ProcessEffect(Effect)
+    if not Enabled or not EffectTypes[Effect.ClassName] then
+        return
+    end
+
+    if not Connections[Effect] then
+        Connections[Effect] = Effect:GetPropertyChangedSignal("Enabled"):Connect(function()
+            if Enabled and Effect.Enabled then
+                Manager.Claim(Owner, Effect, "Enabled", false)
+            end
+        end)
+    end
+
+    if Effect.Enabled then
+        Manager.Claim(Owner, Effect, "Enabled", false)
+    end
+end
+
+local function Scan()
+    for _, Effect in ipairs(Workspace:GetDescendants()) do
+        ProcessEffect(Effect)
+    end
+end
+
+local function SetParticleOptimizer(State)
+    Enabled = State == true
+
+    if Enabled then
+        Scan()
+    else
+        for Effect, Connection in pairs(Connections) do
+            Connection:Disconnect()
+            Connections[Effect] = nil
+        end
+
+        Manager.ReleaseOwner(Owner)
+    end
+end
+
+Workspace.DescendantAdded:Connect(function(Effect)
+    if Enabled then
+        ProcessEffect(Effect)
+    end
+end)
+
+task.spawn(function()
+    while true do
+        task.wait(2)
+
+        if Enabled then
+            Scan()
+        end
+    end
+end)
+
+return SetParticleOptimizer
