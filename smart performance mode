@@ -1,0 +1,189 @@
+
+local Workspace = game:GetService("Workspace")
+local Lighting = game:GetService("Lighting")
+
+return function()
+    local Controller = {}
+
+    local Enabled = false
+    local Level = 1
+    local Destroyed = false
+
+    local OriginalSettings = setmetatable({}, {__mode = "k"})
+
+    local Profiles = {
+        [0] = {
+            Name = "High Performance",
+            ShadowDistance = 0,
+            ParticleDistance = 80,
+        },
+        [1] = {
+            Name = "Balanced",
+            ShadowDistance = 100,
+            ParticleDistance = 150,
+        },
+        [2] = {
+            Name = "Smooth",
+            ShadowDistance = -1,
+            ParticleDistance = -1,
+        },
+    }
+
+    local function Save(instance, property)
+        OriginalSettings[instance] = OriginalSettings[instance] or {}
+
+        if OriginalSettings[instance][property] ~= nil then
+            return
+        end
+
+        local success, value = pcall(function()
+            return instance[property]
+        end)
+
+        if success then
+            OriginalSettings[instance][property] = value
+        end
+    end
+
+    local function SetProperty(instance, property, value)
+        Save(instance, property)
+
+        pcall(function()
+            instance[property] = value
+        end)
+    end
+
+    local function GetDistance(instance)
+        local camera = Workspace.CurrentCamera
+
+        if not camera then
+            return 0
+        end
+
+        local success, position = pcall(function()
+            return instance.Position
+        end)
+
+        if not success then
+            return 0
+        end
+
+        return (camera.CFrame.Position - position).Magnitude
+    end
+
+    local function RestoreInstance(instance)
+        local settings = OriginalSettings[instance]
+
+        if not settings then
+            return
+        end
+
+        for property, value in pairs(settings) do
+            pcall(function()
+                instance[property] = value
+            end)
+        end
+
+        OriginalSettings[instance] = nil
+    end
+
+    local function ApplyInstance(instance)
+        local profile = Profiles[Level]
+
+        if instance:IsA("BasePart") then
+            Save(instance, "CastShadow")
+
+            if profile.ShadowDistance == 0 then
+                SetProperty(instance, "CastShadow", false)
+            elseif profile.ShadowDistance > 0 then
+                SetProperty(
+                    instance,
+                    "CastShadow",
+                    GetDistance(instance) <= profile.ShadowDistance
+                )
+            end
+
+        elseif instance:IsA("ParticleEmitter") then
+            Save(instance, "Enabled")
+
+            if profile.ParticleDistance == 0 then
+                SetProperty(instance, "Enabled", false)
+            elseif profile.ParticleDistance > 0 then
+                SetProperty(
+                    instance,
+                    "Enabled",
+                    GetDistance(instance) <= profile.ParticleDistance
+                )
+            end
+        end
+    end
+
+    local function ApplyAll()
+        for _, instance in ipairs(Workspace:GetDescendants()) do
+            ApplyInstance(instance)
+        end
+    end
+
+    local function RestoreAll()
+        for instance in pairs(OriginalSettings) do
+            RestoreInstance(instance)
+        end
+    end
+
+    function Controller.SetLevel(level)
+        if Destroyed then
+            return false
+        end
+
+        Level = math.clamp(math.floor(tonumber(level) or 1), 0, 2)
+
+        if Enabled then
+            RestoreAll()
+            ApplyAll()
+        end
+
+        return true
+    end
+
+    function Controller.GetLevel()
+        return Level
+    end
+
+    function Controller.GetModeName()
+        return Profiles[Level].Name
+    end
+
+    function Controller.SetEnabled(state)
+        if Destroyed then
+            return false
+        end
+
+        state = state == true
+
+        if Enabled == state then
+            return true
+        end
+
+        Enabled = state
+
+        if Enabled then
+            ApplyAll()
+        else
+            RestoreAll()
+        end
+
+        return true
+    end
+
+    function Controller.Destroy()
+        if Destroyed then
+            return
+        end
+
+        Controller.SetEnabled(false)
+        Destroyed = true
+        RestoreAll()
+    end
+
+    return Controller
+end
