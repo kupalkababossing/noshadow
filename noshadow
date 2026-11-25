@@ -1,55 +1,38 @@
 
---====================================================
--- JOSHZZ FEATURE | NO SHADOWS
--- PERSISTENT | ON/OFF | REMOTE READY
---====================================================
-
 local Lighting = game:GetService("Lighting")
 
 local Enabled = false
 local SavedState = nil
 local Connection = nil
 
-local function Apply()
-    if not Enabled then return end
-    Lighting.GlobalShadows = false
-end
-
 local function SetNoShadows(state)
-
     Enabled = state == true
 
     if Enabled then
-
         if SavedState == nil then
             SavedState = Lighting.GlobalShadows
         end
 
-        Apply()
+        Lighting.GlobalShadows = false
 
         if not Connection then
             Connection = Lighting:GetPropertyChangedSignal("GlobalShadows"):Connect(function()
                 if Enabled and Lighting.GlobalShadows then
-                    Apply()
+                    Lighting.GlobalShadows = false
                 end
             end)
         end
-
     else
-
         if Connection then
             Connection:Disconnect()
             Connection = nil
         end
 
         if SavedState ~= nil then
-            local original = SavedState
+            Lighting.GlobalShadows = SavedState
             SavedState = nil
-            Lighting.GlobalShadows = original
         end
-
     end
-
 end
 
 return SetNoShadows
