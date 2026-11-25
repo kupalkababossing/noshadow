@@ -1,0 +1,39 @@
+local Lighting = game:GetService("Lighting")
+local Manager = getgenv().JOSHZZ_EFFECT_MANAGER
+
+local Owner = {}
+local Enabled = false
+
+local EffectTypes = {
+    BloomEffect = true,
+    BlurEffect = true,
+    ColorCorrectionEffect = true,
+    DepthOfFieldEffect = true,
+    SunRaysEffect = true
+}
+
+local function ProcessEffect(Effect)
+    if EffectTypes[Effect.ClassName] then
+        Manager.Claim(Owner, Effect, "Enabled", false)
+    end
+end
+
+local function SetRenderingOptimizer(State)
+    Enabled = State == true
+
+    if Enabled then
+        for _, Effect in ipairs(Lighting:GetDescendants()) do
+            ProcessEffect(Effect)
+        end
+    else
+        Manager.ReleaseOwner(Owner)
+    end
+end
+
+Lighting.DescendantAdded:Connect(function(Effect)
+    if Enabled then
+        ProcessEffect(Effect)
+    end
+end)
+
+return SetRenderingOptimizer
