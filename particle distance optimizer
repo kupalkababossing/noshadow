@@ -1,0 +1,87 @@
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local Manager = getgenv().JOSHZZ_SHARED_EFFECT_MANAGER
+
+if not Manager then
+    error("JOSHZZ SharedEffectManager is not initialized")
+end
+
+local Owner = {}
+local Enabled = false
+local Processed = {}
+local MaxDistance = 150
+
+local function ProcessEmitter(Object)
+    if not Enabled or not Object:IsA("ParticleEmitter") or Processed[Object] then
+        return
+    end
+
+    Processed[Object] = Object.Enabled
+end
+
+local function Scan()
+    for _, Object in ipairs(Workspace:GetDescendants()) do
+        ProcessEmitter(Object)
+    end
+end
+
+local function UpdateDistance()
+    local Camera = Workspace.CurrentCamera
+
+    if not Camera then
+        return
+    end
+
+    local CameraPosition = Camera.CFrame.Position
+
+    for Emitter, OriginalEnabled in pairs(Processed) do
+        if not Emitter.Parent then
+            Processed[Emitter] = nil
+        elseif OriginalEnabled then
+            local Parent = Emitter.Parent
+            local Position
+
+            if Parent:IsA("Attachment") then
+                Position = Parent.WorldPosition
+            elseif Parent:IsA("BasePart") then
+                Position = Parent.Position
+            end
+
+            if Position then
+                local Distance = (CameraPosition - Position).Magnitude
+                Manager.Claim(Owner, Emitter, "Enabled", Distance <= MaxDistance)
+            end
+        end
+    end
+end
+
+local function SetParticleDistanceOptimizer(State)
+    Enabled = State == true
+
+    if Enabled then
+        Scan()
+        UpdateDistance()
+    else
+        table.clear(Processed)
+        Manager.ReleaseOwner(Owner)
+    end
+end
+
+Workspace.DescendantAdded:Connect(function(Object)
+    if Enabled then
+        ProcessEmitter(Object)
+    end
+end)
+
+task.spawn(function()
+    while true do
+        task.wait(0.5)
+
+        if Enabled then
+            Scan()
+            UpdateDistance()
+        end
+    end
+end)
+
+return SetParticleDistanceOptimizer

@@ -1,0 +1,69 @@
+local Workspace = game:GetService("Workspace")
+local Manager = getgenv().JOSHZZ_SHARED_EFFECT_MANAGER
+
+if not Manager then
+    error("JOSHZZ SharedEffectManager is not initialized")
+end
+
+local Owner = {}
+local Enabled = false
+local Connections = {}
+local Processed = {}
+
+local function ProcessPart(Object)
+    if not Enabled or not Object:IsA("BasePart") or Processed[Object] then
+        return
+    end
+
+    Processed[Object] = true
+
+    Connections[Object] = Object:GetPropertyChangedSignal("Material"):Connect(function()
+        if Enabled and Object.Material ~= Enum.Material.Plastic then
+            Manager.Claim(Owner, Object, "Material", Enum.Material.Plastic)
+        end
+    end)
+
+    if Object.Material ~= Enum.Material.Plastic then
+        Manager.Claim(Owner, Object, "Material", Enum.Material.Plastic)
+    end
+end
+
+local function Scan()
+    for _, Object in ipairs(Workspace:GetDescendants()) do
+        ProcessPart(Object)
+    end
+end
+
+local function SetMaterialOptimizer(State)
+    Enabled = State == true
+
+    if Enabled then
+        Scan()
+    else
+        for Object, Connection in pairs(Connections) do
+            Connection:Disconnect()
+            Connections[Object] = nil
+        end
+
+        table.clear(Processed)
+        Manager.ReleaseOwner(Owner)
+    end
+end
+
+Workspace.DescendantAdded:Connect(function(Object)
+    if Enabled then
+        ProcessPart(Object)
+    end
+end)
+
+task.spawn(function()
+    while true do
+        task.wait(2)
+
+        if Enabled then
+            Scan()
+        end
+    end
+end)
+
+return SetMaterialOptimizer

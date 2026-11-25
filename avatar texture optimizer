@@ -1,0 +1,118 @@
+local Workspace = game:GetService("Workspace")
+local Manager = getgenv().JOSHZZ_SHARED_EFFECT_MANAGER
+
+if not Manager then
+    error("JOSHZZ SharedEffectManager is not initialized")
+end
+
+local Owner = {}
+local Enabled = false
+local Connections = {}
+local Processed = {}
+
+local TextureProperties = {
+    Shirt = {"ShirtTemplate"},
+    Pants = {"PantsTemplate"},
+    ShirtGraphic = {"Graphic"},
+    Decal = {"Texture"},
+    Texture = {"Texture"},
+    MeshPart = {"TextureID"}
+}
+
+local function GetCharacter(Object)
+    local Current = Object
+
+    while Current and Current ~= Workspace do
+        if Current:IsA("Model") and Current:FindFirstChildOfClass("Humanoid") then
+            return Current
+        end
+
+        Current = Current.Parent
+    end
+
+    return nil
+end
+
+local function ProcessCharacterObject(Object)
+    if not Enabled or not GetCharacter(Object) or Processed[Object] then
+        return
+    end
+
+    local Properties = TextureProperties[Object.ClassName]
+
+    if not Properties then
+        return
+    end
+
+    Processed[Object] = true
+    Connections[Object] = {}
+
+    for _, Property in ipairs(Properties) do
+        local Success, Value = pcall(function()
+            return Object[Property]
+        end)
+
+        if Success and Value ~= "" then
+            Manager.Claim(Owner, Object, Property, "")
+        end
+
+        local Connection = Object:GetPropertyChangedSignal(Property):Connect(function()
+            if not Enabled then
+                return
+            end
+
+            local ReadSuccess, CurrentValue = pcall(function()
+                return Object[Property]
+            end)
+
+            if ReadSuccess and CurrentValue ~= "" then
+                Manager.Claim(Owner, Object, Property, "")
+            end
+        end)
+
+        table.insert(Connections[Object], Connection)
+    end
+end
+
+local function Scan()
+    for _, Object in ipairs(Workspace:GetDescendants()) do
+        ProcessCharacterObject(Object)
+    end
+end
+
+local function SetAvatarTextureOptimizer(State)
+    Enabled = State == true
+
+    if Enabled then
+        Scan()
+    else
+        for Object, ObjectConnections in pairs(Connections) do
+            for _, Connection in ipairs(ObjectConnections) do
+                Connection:Disconnect()
+            end
+
+            Connections[Object] = nil
+        end
+
+        table.clear(Processed)
+        Manager.ReleaseOwner(Owner)
+    end
+end
+
+Workspace.DescendantAdded:Connect(function(Object)
+    if Enabled then
+        ProcessCharacterObject(Object)
+    end
+end)
+
+task.spawn(function()
+    while true do
+        task.wait(2)
+
+        if Enabled then
+            Scan()
+        end
+    end
+end)
+
+return SetAvatarTextureOptimizer

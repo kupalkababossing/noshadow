@@ -1,0 +1,75 @@
+local Workspace = game:GetService("Workspace")
+local Manager = getgenv().JOSHZZ_SHARED_EFFECT_MANAGER
+
+if not Manager then
+    error("JOSHZZ SharedEffectManager is not initialized")
+end
+
+local Owner = {}
+local Enabled = false
+local Connections = {}
+local Processed = {}
+
+local LightTypes = {
+    PointLight = true,
+    SpotLight = true,
+    SurfaceLight = true
+}
+
+local function ProcessLight(Object)
+    if not Enabled or not LightTypes[Object.ClassName] or Processed[Object] then
+        return
+    end
+
+    Processed[Object] = true
+
+    Connections[Object] = Object:GetPropertyChangedSignal("Enabled"):Connect(function()
+        if Enabled and Object.Enabled then
+            Manager.Claim(Owner, Object, "Enabled", false)
+        end
+    end)
+
+    if Object.Enabled then
+        Manager.Claim(Owner, Object, "Enabled", false)
+    end
+end
+
+local function Scan()
+    for _, Object in ipairs(Workspace:GetDescendants()) do
+        ProcessLight(Object)
+    end
+end
+
+local function SetDynamicLightOptimizer(State)
+    Enabled = State == true
+
+    if Enabled then
+        Scan()
+    else
+        for Object, Connection in pairs(Connections) do
+            Connection:Disconnect()
+            Connections[Object] = nil
+        end
+
+        table.clear(Processed)
+        Manager.ReleaseOwner(Owner)
+    end
+end
+
+Workspace.DescendantAdded:Connect(function(Object)
+    if Enabled then
+        ProcessLight(Object)
+    end
+end)
+
+task.spawn(function()
+    while true do
+        task.wait(2)
+
+        if Enabled then
+            Scan()
+        end
+    end
+end)
+
+return SetDynamicLightOptimizer
