@@ -1,0 +1,77 @@
+
+local Lighting = game:GetService("Lighting")
+local Manager = getgenv().JOSHZZ_SHARED_EFFECT_MANAGER
+
+if not Manager then
+    error("JOSHZZ SharedEffectManager is not initialized")
+end
+
+local Owner = {}
+local Enabled = false
+local Connections = {}
+local Processed = {}
+
+local Properties = {
+    "SkyboxBk",
+    "SkyboxDn",
+    "SkyboxFt",
+    "SkyboxLf",
+    "SkyboxRt",
+    "SkyboxUp"
+}
+
+local function ProcessSky(Sky)
+    if not Enabled or not Sky:IsA("Sky") or Processed[Sky] then
+        return
+    end
+
+    Processed[Sky] = true
+    Connections[Sky] = {}
+
+    for _, Property in ipairs(Properties) do
+        local Connection = Sky:GetPropertyChangedSignal(Property):Connect(function()
+            if Enabled and Sky[Property] ~= "" then
+                Manager.Claim(Owner, Sky, Property, "")
+            end
+        end)
+
+        table.insert(Connections[Sky], Connection)
+
+        if Sky[Property] ~= "" then
+            Manager.Claim(Owner, Sky, Property, "")
+        end
+    end
+end
+
+local function Scan()
+    for _, Object in ipairs(Lighting:GetChildren()) do
+        ProcessSky(Object)
+    end
+end
+
+local function SetSkyOptimizer(State)
+    Enabled = State == true
+
+    if Enabled then
+        Scan()
+    else
+        for Sky, SkyConnections in pairs(Connections) do
+            for _, Connection in ipairs(SkyConnections) do
+                Connection:Disconnect()
+            end
+
+            Connections[Sky] = nil
+        end
+
+        table.clear(Processed)
+        Manager.ReleaseOwner(Owner)
+    end
+end
+
+Lighting.ChildAdded:Connect(function(Object)
+    if Enabled then
+        ProcessSky(Object)
+    end
+end)
+
+return SetSkyOptimizer

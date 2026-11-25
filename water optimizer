@@ -1,0 +1,55 @@
+
+local Workspace = game:GetService("Workspace")
+local Terrain = Workspace.Terrain
+local Manager = getgenv().JOSHZZ_SHARED_EFFECT_MANAGER
+
+if not Manager then
+    error("JOSHZZ SharedEffectManager is not initialized")
+end
+
+local Owner = {}
+local Enabled = false
+local Connections = {}
+
+local Settings = {
+    WaterWaveSize = 0,
+    WaterWaveSpeed = 0,
+    WaterReflectance = 0
+}
+
+local function Apply()
+    if not Enabled then
+        return
+    end
+
+    for Property, Value in pairs(Settings) do
+        Manager.Claim(Owner, Terrain, Property, Value)
+    end
+end
+
+local function SetWaterOptimizer(State)
+    Enabled = State == true
+
+    if Enabled then
+        for Property in pairs(Settings) do
+            if not Connections[Property] then
+                Connections[Property] = Terrain:GetPropertyChangedSignal(Property):Connect(function()
+                    if Enabled then
+                        Apply()
+                    end
+                end)
+            end
+        end
+
+        Apply()
+    else
+        for Property, Connection in pairs(Connections) do
+            Connection:Disconnect()
+            Connections[Property] = nil
+        end
+
+        Manager.ReleaseOwner(Owner)
+    end
+end
+
+return SetWaterOptimizer

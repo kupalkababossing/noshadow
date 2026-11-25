@@ -1,0 +1,96 @@
+
+local Workspace = game:GetService("Workspace")
+local Manager = getgenv().JOSHZZ_SHARED_EFFECT_MANAGER
+
+if not Manager then
+    error("JOSHZZ SharedEffectManager is not initialized")
+end
+
+local Owner = {}
+local Enabled = false
+local Processed = {}
+local Connections = {}
+
+local function ProcessModel(Model)
+    if not Enabled or not Model:IsA("Model") or Processed[Model] then
+        return
+    end
+
+    Processed[Model] = true
+
+    local Success, CurrentLOD = pcall(function()
+        return Model.LevelOfDetail
+    end)
+
+    if not Success then
+        return
+    end
+
+    if CurrentLOD == Enum.ModelLevelOfDetail.Automatic then
+        Connections[Model] = Model:GetPropertyChangedSignal("LevelOfDetail"):Connect(function()
+            if not Enabled then
+                return
+            end
+
+            if Model.LevelOfDetail ~= Enum.ModelLevelOfDetail.StreamingMesh then
+                Manager.Claim(
+                    Owner,
+                    Model,
+                    "LevelOfDetail",
+                    Enum.ModelLevelOfDetail.StreamingMesh
+                )
+            end
+        end)
+
+        pcall(function()
+            Manager.Claim(
+                Owner,
+                Model,
+                "LevelOfDetail",
+                Enum.ModelLevelOfDetail.StreamingMesh
+            )
+        end)
+    end
+end
+
+local function Scan()
+    for _, Object in ipairs(Workspace:GetDescendants()) do
+        if Object:IsA("Model") then
+            ProcessModel(Object)
+        end
+    end
+end
+
+local function SetModelOptimizer(State)
+    Enabled = State == true
+
+    if Enabled then
+        Scan()
+    else
+        for Model, Connection in pairs(Connections) do
+            Connection:Disconnect()
+            Connections[Model] = nil
+        end
+
+        table.clear(Processed)
+        Manager.ReleaseOwner(Owner)
+    end
+end
+
+Workspace.DescendantAdded:Connect(function(Object)
+    if Enabled and Object:IsA("Model") then
+        ProcessModel(Object)
+    end
+end)
+
+task.spawn(function()
+    while true do
+        task.wait(3)
+
+        if Enabled then
+            Scan()
+        end
+    end
+end)
+
+return SetModelOptimizer
