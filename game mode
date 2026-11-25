@@ -68,6 +68,8 @@ if not _G.Settings then
             ["Low Quality Models"] = true,
             ["Reset Materials"] = true,
             ["Lower Quality MeshParts"] = true,
+            ["Low Poly"] = true,
+            ["Smooth Plastic"] = true,
             ClearNilInstances = false
         }
     }
@@ -176,6 +178,7 @@ local function CheckIfBad(Inst)
 
     local Settings = _G.Settings
     local PlayerSettings = Settings.Players or {}
+    local Other = Settings.Other or {}
 
     if Inst:IsDescendantOf(Players) then
         return
@@ -235,21 +238,21 @@ local function CheckIfBad(Inst)
     elseif table.find(CanBeEnabled, Inst.ClassName) then
         if Settings["Invisible Particles"]
             or Settings["No Particles"]
-            or (Settings.Other and Settings.Other["Invisible Particles"])
-            or (Settings.Other and Settings.Other["No Particles"])
+            or Other["Invisible Particles"]
+            or Other["No Particles"]
             or (Settings.Particles and (Settings.Particles.Invisible or Settings.Particles.Destroy)) then
 
             Claim(Inst, "Enabled", false)
         end
 
     elseif Inst:IsA("PostEffect") then
-        if Settings["No Camera Effects"] or (Settings.Other and Settings.Other["No Camera Effects"]) then
+        if Settings["No Camera Effects"] or Other["No Camera Effects"] then
             Claim(Inst, "Enabled", false)
         end
 
     elseif Inst:IsA("Explosion") then
         if Settings["Smaller Explosions"]
-            or (Settings.Other and Settings.Other["Smaller Explosions"])
+            or Other["Smaller Explosions"]
             or (Settings.Explosions and Settings.Explosions.Smaller) then
 
             Claim(Inst, "BlastPressure", 1)
@@ -257,10 +260,10 @@ local function CheckIfBad(Inst)
         end
 
         if Settings["Invisible Explosions"]
-            or (Settings.Other and Settings.Other["Invisible Explosions"])
+            or Other["Invisible Explosions"]
             or (Settings.Explosions and Settings.Explosions.Invisible)
             or Settings["No Explosions"]
-            or (Settings.Other and Settings.Other["No Explosions"])
+            or Other["No Explosions"]
             or (Settings.Explosions and Settings.Explosions.Destroy) then
 
             Claim(Inst, "BlastPressure", 1)
@@ -269,7 +272,7 @@ local function CheckIfBad(Inst)
         end
 
     elseif Inst:IsA("Clothing") then
-        if Settings["No Clothes"] or (Settings.Other and Settings.Other["No Clothes"]) then
+        if Settings["No Clothes"] or Other["No Clothes"] then
             if Inst:IsA("Shirt") then
                 Claim(Inst, "ShirtTemplate", "")
             elseif Inst:IsA("Pants") then
@@ -280,7 +283,7 @@ local function CheckIfBad(Inst)
         end
 
     elseif Inst:IsA("SurfaceAppearance") then
-        if Settings["No Clothes"] or (Settings.Other and Settings.Other["No Clothes"]) then
+        if Settings["No Clothes"] or Other["No Clothes"] then
             Claim(Inst, "ColorMap", "")
             Claim(Inst, "MetalnessMap", "")
             Claim(Inst, "NormalMap", "")
@@ -288,19 +291,28 @@ local function CheckIfBad(Inst)
         end
 
     elseif Inst:IsA("BaseWrap") then
-        if Settings["No Clothes"] or (Settings.Other and Settings.Other["No Clothes"]) then
+        if Settings["No Clothes"] or Other["No Clothes"] then
             Claim(Inst, "Enabled", false)
         end
 
     elseif Inst:IsA("BasePart") and not Inst:IsA("MeshPart") then
-        if Settings["Low Quality Parts"] or (Settings.Other and Settings.Other["Low Quality Parts"]) then
+        if Settings["Low Quality Parts"] or Other["Low Quality Parts"] then
             Claim(Inst, "Material", Enum.Material.Plastic)
+            Claim(Inst, "Reflectance", 0)
+        end
+
+        if Settings["Low Poly"] or Other["Low Poly"] then
+            Claim(Inst, "Reflectance", 0)
+        end
+
+        if Settings["Smooth Plastic"] or Other["Smooth Plastic"] then
+            Claim(Inst, "Material", Enum.Material.SmoothPlastic)
             Claim(Inst, "Reflectance", 0)
         end
 
     elseif Inst:IsA("TextLabel") and Inst:IsDescendantOf(workspace) then
         if Settings["Lower Quality TextLabels"]
-            or (Settings.Other and Settings.Other["Lower Quality TextLabels"])
+            or Other["Lower Quality TextLabels"]
             or (Settings.TextLabels and Settings.TextLabels.LowerQuality) then
 
             Claim(Inst, "Font", Enum.Font.SourceSans)
@@ -310,17 +322,17 @@ local function CheckIfBad(Inst)
         end
 
         if Settings["Invisible TextLabels"]
-            or (Settings.Other and Settings.Other["Invisible TextLabels"])
+            or Other["Invisible TextLabels"]
             or (Settings.TextLabels and Settings.TextLabels.Invisible)
             or Settings["No TextLabels"]
-            or (Settings.Other and Settings.Other["No TextLabels"])
+            or Other["No TextLabels"]
             or (Settings.TextLabels and Settings.TextLabels.Destroy) then
 
             Claim(Inst, "Visible", false)
         end
 
     elseif Inst:IsA("Model") then
-        if Settings["Low Quality Models"] or (Settings.Other and Settings.Other["Low Quality Models"]) then
+        if Settings["Low Quality Models"] or Other["Low Quality Models"] then
             pcall(function()
                 Claim(Inst, "LevelOfDetail", Enum.ModelLevelOfDetail.StreamingMesh)
             end)
@@ -328,7 +340,7 @@ local function CheckIfBad(Inst)
 
     elseif Inst:IsA("MeshPart") then
         if Settings["Low Quality MeshParts"]
-            or (Settings.Other and Settings.Other["Low Quality MeshParts"])
+            or Other["Low Quality MeshParts"]
             or (Settings.MeshParts and Settings.MeshParts.LowerQuality) then
 
             Claim(Inst, "RenderFidelity", Enum.RenderFidelity.Performance)
@@ -337,10 +349,10 @@ local function CheckIfBad(Inst)
         end
 
         if Settings["Invisible MeshParts"]
-            or (Settings.Other and Settings.Other["Invisible MeshParts"])
+            or Other["Invisible MeshParts"]
             or (Settings.MeshParts and Settings.MeshParts.Invisible)
             or Settings["No MeshParts"]
-            or (Settings.Other and Settings.Other["No MeshParts"])
+            or Other["No MeshParts"]
             or (Settings.MeshParts and Settings.MeshParts.Destroy) then
 
             Claim(Inst, "Transparency", 1)
@@ -357,6 +369,16 @@ local function CheckIfBad(Inst)
             pcall(function()
                 Claim(Inst, "MeshId", "")
             end)
+        end
+
+        if Settings["Low Poly"] or Other["Low Poly"] then
+            Claim(Inst, "RenderFidelity", Enum.RenderFidelity.Performance)
+            Claim(Inst, "Reflectance", 0)
+        end
+
+        if Settings["Smooth Plastic"] or Other["Smooth Plastic"] then
+            Claim(Inst, "Material", Enum.Material.SmoothPlastic)
+            Claim(Inst, "Reflectance", 0)
         end
     end
 end
@@ -432,8 +454,8 @@ local function ApplyGlobalSettings()
     end
 
     if FPSSetting then
-        if setfpscap then
-            if not FPSChanged and getfpscap then
+        if setfpscap and getfpscap then
+            if not FPSChanged then
                 local Success, Value = pcall(getfpscap)
 
                 if Success then
@@ -442,13 +464,15 @@ local function ApplyGlobalSettings()
                 end
             end
 
-            if type(FPSSetting) == "string" or type(FPSSetting) == "number" then
-                pcall(setfpscap, tonumber(FPSSetting))
-            elseif FPSSetting == true then
-                pcall(setfpscap, 1e6)
+            if FPSChanged then
+                if type(FPSSetting) == "string" or type(FPSSetting) == "number" then
+                    pcall(setfpscap, tonumber(FPSSetting))
+                elseif FPSSetting == true then
+                    pcall(setfpscap, 1e6)
+                end
             end
         else
-            warn("FPS Cap Failed")
+            warn("FPS Cap unavailable or cannot be restored")
         end
     end
 
