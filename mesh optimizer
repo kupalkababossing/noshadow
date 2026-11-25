@@ -11,7 +11,7 @@ local Enabled = false
 
 local function ProcessEffect(Effect)
     if Effect:IsA("MeshPart") then
-        Manager.Claim(Owner, Effect, "RenderFidelity", Enum.MeshPartRenderFidelity.Performance)
+        Manager.Claim(Owner, Effect, "RenderFidelity", Enum.RenderFidelity.Performance)
     end
 end
 
