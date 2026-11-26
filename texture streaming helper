@@ -1,0 +1,129 @@
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local Env = (getgenv and getgenv()) or _G
+local Manager = Env.JOSHZZ_SHARED_EFFECT_MANAGER
+
+local Owner = "TextureStreamingHelper"
+local Active = false
+local MaxDistance = 350
+local UpdateInterval = 1
+
+local Tracked = {}
+local AddedConnection
+local LoopThread
+
+local function IsTexture(Instance)
+    return Instance:IsA("Decal") or Instance:IsA("Texture")
+end
+
+local function GetPosition(Instance)
+    local Parent = Instance.Parent
+
+    if Parent and Parent:IsA("BasePart") then
+        return Parent.Position
+    end
+
+    return nil
+end
+
+local function GetOwner(Instance)
+    return Owner .. "_" .. tostring(Instance)
+end
+
+local function ProcessInstance(Instance)
+    if not Active or not IsTexture(Instance) then
+        return
+    end
+
+    if Tracked[Instance] then
+        return
+    end
+
+    Tracked[Instance] = true
+end
+
+local function UpdateTextures()
+    local Camera = workspace.CurrentCamera
+
+    if not Camera then
+        return
+    end
+
+    local CameraPosition = Camera.CFrame.Position
+
+    for Instance in pairs(Tracked) do
+        if not Instance.Parent then
+            Manager:ReleaseOwner(GetOwner(Instance))
+            Tracked[Instance] = nil
+        else
+            local Position = GetPosition(Instance)
+
+            if Position then
+                local Distance = (CameraPosition - Position).Magnitude
+                local InstanceOwner = GetOwner(Instance)
+
+                if Distance > MaxDistance then
+                    Manager:Claim(InstanceOwner, Instance, "Transparency", 1)
+                else
+                    Manager:ReleaseOwner(InstanceOwner)
+                end
+            end
+        end
+    end
+end
+
+local function Enable()
+    if Active then
+        return
+    end
+
+    if not Manager then
+        warn("Texture Streaming Helper: Shared Effect Manager unavailable")
+        return
+    end
+
+    Active = true
+
+    for _, Instance in ipairs(workspace:GetDescendants()) do
+        ProcessInstance(Instance)
+    end
+
+    AddedConnection = workspace.DescendantAdded:Connect(ProcessInstance)
+
+    LoopThread = task.spawn(function()
+        while Active do
+            UpdateTextures()
+            task.wait(UpdateInterval)
+        end
+    end)
+end
+
+local function Disable()
+    if not Active then
+        return
+    end
+
+    Active = false
+
+    if AddedConnection then
+        AddedConnection:Disconnect()
+        AddedConnection = nil
+    end
+
+    for Instance in pairs(Tracked) do
+        Manager:ReleaseOwner(GetOwner(Instance))
+    end
+
+    table.clear(Tracked)
+    LoopThread = nil
+end
+
+return function(State)
+    if State then
+        Enable()
+    else
+        Disable()
+    end
+end

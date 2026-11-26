@@ -1,0 +1,80 @@
+
+local Env = (getgenv and getgenv()) or _G
+local Manager = Env.JOSHZZ_SHARED_EFFECT_MANAGER
+
+local Owner = "TextureResolutionOptimizer"
+local Active = false
+local Processed = {}
+
+local AddedConnection
+
+local function Claim(Instance, Property)
+    if not Active or not Instance.Parent then
+        return
+    end
+
+    local Properties = Processed[Instance]
+
+    if not Properties then
+        Properties = {}
+        Processed[Instance] = Properties
+    end
+
+    if Properties[Property] then
+        return
+    end
+
+    Properties[Property] = true
+    Manager:Claim(Owner, Instance, Property, "")
+end
+
+local function ProcessInstance(Instance)
+    if Instance:IsA("MeshPart") then
+        Claim(Instance, "TextureID")
+    elseif Instance:IsA("SpecialMesh") then
+        Claim(Instance, "TextureId")
+    end
+end
+
+local function Enable()
+    if Active then
+        return
+    end
+
+    if not Manager then
+        warn("Texture Resolution Optimizer: Shared Effect Manager unavailable")
+        return
+    end
+
+    Active = true
+
+    for _, Instance in ipairs(workspace:GetDescendants()) do
+        ProcessInstance(Instance)
+    end
+
+    AddedConnection = workspace.DescendantAdded:Connect(ProcessInstance)
+end
+
+local function Disable()
+    if not Active then
+        return
+    end
+
+    Active = false
+
+    if AddedConnection then
+        AddedConnection:Disconnect()
+        AddedConnection = nil
+    end
+
+    Manager:ReleaseOwner(Owner)
+    table.clear(Processed)
+end
+
+return function(State)
+    if State then
+        Enable()
+    else
+        Disable()
+    end
+end

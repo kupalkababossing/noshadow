@@ -1,0 +1,75 @@
+
+local Env = (getgenv and getgenv()) or _G
+local Manager = Env.JOSHZZ_SHARED_EFFECT_MANAGER
+
+local Owner = "SurfaceAppearanceOptimizer"
+local Active = false
+local Processed = {}
+
+local AddedConnection
+
+local Properties = {
+    "ColorMap",
+    "NormalMap",
+    "RoughnessMap",
+    "MetalnessMap",
+}
+
+local function ProcessInstance(Instance)
+    if not Active or not Instance:IsA("SurfaceAppearance") then
+        return
+    end
+
+    if Processed[Instance] then
+        return
+    end
+
+    Processed[Instance] = true
+
+    for _, Property in ipairs(Properties) do
+        Manager:Claim(Owner, Instance, Property, "")
+    end
+end
+
+local function Enable()
+    if Active then
+        return
+    end
+
+    if not Manager then
+        warn("Surface Appearance Optimizer: Shared Effect Manager unavailable")
+        return
+    end
+
+    Active = true
+
+    for _, Instance in ipairs(workspace:GetDescendants()) do
+        ProcessInstance(Instance)
+    end
+
+    AddedConnection = workspace.DescendantAdded:Connect(ProcessInstance)
+end
+
+local function Disable()
+    if not Active then
+        return
+    end
+
+    Active = false
+
+    if AddedConnection then
+        AddedConnection:Disconnect()
+        AddedConnection = nil
+    end
+
+    Manager:ReleaseOwner(Owner)
+    table.clear(Processed)
+end
+
+return function(State)
+    if State then
+        Enable()
+    else
+        Disable()
+    end
+end
