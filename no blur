@@ -1,0 +1,59 @@
+
+local Env = (getgenv and getgenv()) or _G
+local Manager = Env.JOSHZZ_SHARED_EFFECT_MANAGER
+
+local Owner = "NoBlur"
+local Active = false
+local Processed = {}
+local AddedConnection
+
+local function Process(Instance)
+    if not Active or not Instance:IsA("BlurEffect") then
+        return
+    end
+
+    if Processed[Instance] then
+        return
+    end
+
+    Processed[Instance] = true
+    Manager:Claim(Owner, Instance, "Enabled", false)
+end
+
+local function Enable()
+    if Active then return end
+    if not Manager then
+        warn("No Blur: Shared Effect Manager unavailable")
+        return
+    end
+
+    Active = true
+
+    for _, Instance in ipairs(game:GetDescendants()) do
+        Process(Instance)
+    end
+
+    AddedConnection = game.DescendantAdded:Connect(Process)
+end
+
+local function Disable()
+    if not Active then return end
+
+    Active = false
+
+    if AddedConnection then
+        AddedConnection:Disconnect()
+        AddedConnection = nil
+    end
+
+    Manager:ReleaseOwner(Owner)
+    table.clear(Processed)
+end
+
+return function(State)
+    if State then
+        Enable()
+    else
+        Disable()
+    end
+end
