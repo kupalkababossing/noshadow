@@ -1,0 +1,172 @@
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local Env = (getgenv and getgenv()) or _G
+local Owner = "FrameRateStabilizer"
+
+local Active = false
+local Connections = {}
+local Processed = setmetatable({}, {__mode = "k"})
+local Pending = {}
+local PendingSet = setmetatable({}, {__mode = "k"})
+
+local QueueIndex = 1
+local LastProcess = 0
+local ProcessInterval = 0.15
+local MaxPerCycle = 30
+local AddedConnection
+local HeartbeatConnection
+local CharacterConnections = {}
+
+local function IsIgnored(Inst)
+    if Inst:IsDescendantOf(Players) then
+        return true
+    end
+
+    if type(_G.Ignore) == "table" then
+        for _, Ignored in ipairs(_G.Ignore) do
+            if Ignored and (Inst == Ignored or Inst:IsDescendantOf(Ignored)) then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
+local function ProcessInstance(Inst)
+    if not Active or not Inst or not Inst.Parent then
+        return
+    end
+
+    if Processed[Inst] or IsIgnored(Inst) then
+        return
+    end
+
+    Processed[Inst] = true
+end
+
+local function QueueInstance(Inst)
+    if not Active or not Inst or PendingSet[Inst] or Processed[Inst] then
+        return
+    end
+
+    PendingSet[Inst] = true
+    Pending[#Pending + 1] = Inst
+end
+
+local function ProcessQueue()
+    if not Active then
+        return
+    end
+
+    local Count = 0
+
+    while QueueIndex <= #Pending and Count < MaxPerCycle do
+        local Inst = Pending[QueueIndex]
+
+        Pending[QueueIndex] = nil
+        QueueIndex += 1
+        PendingSet[Inst] = nil
+
+        ProcessInstance(Inst)
+        Count += 1
+    end
+
+    if QueueIndex > #Pending then
+        Pending = {}
+        QueueIndex = 1
+    end
+end
+
+local function ConnectCharacter(Character)
+    if not Character then
+        return
+    end
+
+    for _, Inst in ipairs(Character:GetDescendants()) do
+        QueueInstance(Inst)
+    end
+
+    local Connection = Character.DescendantAdded:Connect(QueueInstance)
+    CharacterConnections[#CharacterConnections + 1] = Connection
+end
+
+local function Enable()
+    if Active then
+        return
+    end
+
+    Active = true
+    Processed = setmetatable({}, {__mode = "k"})
+    Pending = {}
+    PendingSet = setmetatable({}, {__mode = "k"})
+    QueueIndex = 1
+    LastProcess = 0
+
+    for _, Inst in ipairs(workspace:GetDescendants()) do
+        QueueInstance(Inst)
+    end
+
+    AddedConnection = workspace.DescendantAdded:Connect(QueueInstance)
+
+    for _, Player in ipairs(Players:GetPlayers()) do
+        if Player.Character then
+            ConnectCharacter(Player.Character)
+        end
+
+        local Connection = Player.CharacterAdded:Connect(ConnectCharacter)
+        CharacterConnections[#CharacterConnections + 1] = Connection
+    end
+
+    HeartbeatConnection = RunService.Heartbeat:Connect(function()
+        if not Active then
+            return
+        end
+
+        local Now = os.clock()
+
+        if Now - LastProcess >= ProcessInterval then
+            LastProcess = Now
+            ProcessQueue()
+        end
+    end)
+end
+
+local function Disable()
+    if not Active then
+        return
+    end
+
+    Active = false
+
+    if AddedConnection then
+        AddedConnection:Disconnect()
+        AddedConnection = nil
+    end
+
+    if HeartbeatConnection then
+        HeartbeatConnection:Disconnect()
+        HeartbeatConnection = nil
+    end
+
+    for _, Connection in ipairs(CharacterConnections) do
+        Connection:Disconnect()
+    end
+
+    CharacterConnections = {}
+    Connections = {}
+    Pending = {}
+    PendingSet = setmetatable({}, {__mode = "k"})
+    Processed = setmetatable({}, {__mode = "k"})
+    QueueIndex = 1
+end
+
+return function(State)
+    if State then
+        Enable()
+    else
+        Disable()
+    end
+end
