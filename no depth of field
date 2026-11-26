@@ -1,0 +1,53 @@
+local Lighting = game:GetService("Lighting")
+local Manager = (getgenv and getgenv() or _G).JOSHZZ_SHARED_EFFECT_MANAGER
+
+if not Manager then
+    warn("No Depth of Field: SharedEffectManager unavailable")
+    return
+end
+
+local Owner = "NoDepthOfField"
+local Processed = {}
+local Connection
+local Active = false
+
+local function Apply(Instance)
+    if not Instance:IsA("DepthOfFieldEffect") or Processed[Instance] then
+        return
+    end
+
+    Processed[Instance] = true
+    Manager:Claim(Owner, Instance, "Enabled", false)
+end
+
+local function Enable()
+    if Active then return end
+    Active = true
+
+    for _, Instance in ipairs(game:GetDescendants()) do
+        Apply(Instance)
+    end
+
+    Connection = game.DescendantAdded:Connect(Apply)
+end
+
+local function Disable()
+    if not Active then return end
+    Active = false
+
+    if Connection then
+        Connection:Disconnect()
+        Connection = nil
+    end
+
+    Manager:ReleaseOwner(Owner)
+    table.clear(Processed)
+end
+
+return function(State)
+    if State then
+        Enable()
+    else
+        Disable()
+    end
+end
