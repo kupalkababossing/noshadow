@@ -1,96 +1,33 @@
-
-local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
-local Env = (getgenv and getgenv()) or _G
-local Owner = "FrameRateStabilizer"
-
 local Active = false
-local Connections = {}
-local Processed = setmetatable({}, {__mode = "k"})
-local Pending = {}
-local PendingSet = setmetatable({}, {__mode = "k"})
+local Connection
+local LastUpdate = 0
+local LowFPSCount = 0
+local StableFPSCount = 0
 
-local QueueIndex = 1
-local LastProcess = 0
-local ProcessInterval = 0.15
-local MaxPerCycle = 30
-local AddedConnection
-local HeartbeatConnection
-local CharacterConnections = {}
+local TargetFPS = 999
+local CheckInterval = 2
+local LowThreshold = 45
+local RecoveryThreshold = 90
 
-local function IsIgnored(Inst)
-    if Inst:IsDescendantOf(Players) then
-        return true
-    end
+local OriginalQuality
+local CurrentQuality
 
-    if type(_G.Ignore) == "table" then
-        for _, Ignored in ipairs(_G.Ignore) do
-            if Ignored and (Inst == Ignored or Inst:IsDescendantOf(Ignored)) then
-                return true
-            end
-        end
-    end
+local function GetQuality()
+    local Success, Value = pcall(function()
+        return settings().Rendering.QualityLevel
+    end)
 
-    return false
-end
-
-local function ProcessInstance(Inst)
-    if not Active or not Inst or not Inst.Parent then
-        return
-    end
-
-    if Processed[Inst] or IsIgnored(Inst) then
-        return
-    end
-
-    Processed[Inst] = true
-end
-
-local function QueueInstance(Inst)
-    if not Active or not Inst or PendingSet[Inst] or Processed[Inst] then
-        return
-    end
-
-    PendingSet[Inst] = true
-    Pending[#Pending + 1] = Inst
-end
-
-local function ProcessQueue()
-    if not Active then
-        return
-    end
-
-    local Count = 0
-
-    while QueueIndex <= #Pending and Count < MaxPerCycle do
-        local Inst = Pending[QueueIndex]
-
-        Pending[QueueIndex] = nil
-        QueueIndex += 1
-        PendingSet[Inst] = nil
-
-        ProcessInstance(Inst)
-        Count += 1
-    end
-
-    if QueueIndex > #Pending then
-        Pending = {}
-        QueueIndex = 1
+    if Success then
+        return Value
     end
 end
 
-local function ConnectCharacter(Character)
-    if not Character then
-        return
-    end
-
-    for _, Inst in ipairs(Character:GetDescendants()) do
-        QueueInstance(Inst)
-    end
-
-    local Connection = Character.DescendantAdded:Connect(QueueInstance)
-    CharacterConnections[#CharacterConnections + 1] = Connection
+local function SetQuality(Value)
+    pcall(function()
+        settings().Rendering.QualityLevel = Value
+    end)
 end
 
 local function Enable()
@@ -98,38 +35,54 @@ local function Enable()
         return
     end
 
+    OriginalQuality = GetQuality()
+
+    if not OriginalQuality then
+        return
+    end
+
+    CurrentQuality = OriginalQuality
     Active = true
-    Processed = setmetatable({}, {__mode = "k"})
-    Pending = {}
-    PendingSet = setmetatable({}, {__mode = "k"})
-    QueueIndex = 1
-    LastProcess = 0
+    LastUpdate = 0
+    LowFPSCount = 0
+    StableFPSCount = 0
 
-    for _, Inst in ipairs(workspace:GetDescendants()) do
-        QueueInstance(Inst)
-    end
-
-    AddedConnection = workspace.DescendantAdded:Connect(QueueInstance)
-
-    for _, Player in ipairs(Players:GetPlayers()) do
-        if Player.Character then
-            ConnectCharacter(Player.Character)
-        end
-
-        local Connection = Player.CharacterAdded:Connect(ConnectCharacter)
-        CharacterConnections[#CharacterConnections + 1] = Connection
-    end
-
-    HeartbeatConnection = RunService.Heartbeat:Connect(function()
+    Connection = RunService.RenderStepped:Connect(function(DeltaTime)
         if not Active then
             return
         end
 
         local Now = os.clock()
 
-        if Now - LastProcess >= ProcessInterval then
-            LastProcess = Now
-            ProcessQueue()
+        if Now - LastUpdate < CheckInterval then
+            return
+        end
+
+        LastUpdate = Now
+
+        local FPS = 1 / math.max(DeltaTime, 0.001)
+
+        if FPS < LowThreshold then
+            LowFPSCount += 1
+            StableFPSCount = 0
+        elseif FPS >= RecoveryThreshold then
+            StableFPSCount += 1
+            LowFPSCount = 0
+        else
+            LowFPSCount = 0
+            StableFPSCount = 0
+        end
+
+        if LowFPSCount >= 2 then
+            local NewQuality = math.max(1, CurrentQuality.Value - 1)
+            CurrentQuality = Enum.QualityLevel.NewQuality
+            SetQuality(CurrentQuality)
+            LowFPSCount = 0
+        elseif StableFPSCount >= 5 then
+            local NewQuality = math.min(10, CurrentQuality.Value + 1)
+            CurrentQuality = Enum.QualityLevel.NewQuality
+            SetQuality(CurrentQuality)
+            StableFPSCount = 0
         end
     end)
 end
@@ -141,26 +94,17 @@ local function Disable()
 
     Active = false
 
-    if AddedConnection then
-        AddedConnection:Disconnect()
-        AddedConnection = nil
-    end
-
-    if HeartbeatConnection then
-        HeartbeatConnection:Disconnect()
-        HeartbeatConnection = nil
-    end
-
-    for _, Connection in ipairs(CharacterConnections) do
+    if Connection then
         Connection:Disconnect()
+        Connection = nil
     end
 
-    CharacterConnections = {}
-    Connections = {}
-    Pending = {}
-    PendingSet = setmetatable({}, {__mode = "k"})
-    Processed = setmetatable({}, {__mode = "k"})
-    QueueIndex = 1
+    if OriginalQuality then
+        SetQuality(OriginalQuality)
+    end
+
+    OriginalQuality = nil
+    CurrentQuality = nil
 end
 
 return function(State)
