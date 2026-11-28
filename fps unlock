@@ -1,8 +1,6 @@
-
-local Env = (getgenv and getgenv()) or _G
-
 local OriginalFPSCap
 local Active = false
+local TargetFPS = 999
 
 local function Enable()
     if Active then
@@ -10,20 +8,18 @@ local function Enable()
     end
 
     if not setfpscap or not getfpscap then
-        warn("Unlock FPS: FPS functions unavailable")
         return
     end
 
     local Success, Value = pcall(getfpscap)
 
     if not Success then
-        warn("Unlock FPS: Failed to get original FPS cap")
         return
     end
 
     OriginalFPSCap = Value
 
-    local Changed = pcall(setfpscap, 999)
+    local Changed = pcall(setfpscap, TargetFPS)
 
     if Changed then
         Active = true
@@ -35,7 +31,7 @@ local function Disable()
         return
     end
 
-    if OriginalFPSCap ~= nil and setfpscap then
+    if OriginalFPSCap ~= nil then
         pcall(setfpscap, OriginalFPSCap)
     end
 
