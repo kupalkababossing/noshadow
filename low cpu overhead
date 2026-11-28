@@ -1,0 +1,138 @@
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local Env = (getgenv and getgenv()) or _G
+local Owner = "LowCPUOverhead"
+
+local Active = false
+local Connections = {}
+local Processed = setmetatable({}, {__mode = "k"})
+local Pending = {}
+local PendingSet = setmetatable({}, {__mode = "k"})
+
+local QueueIndex = 1
+local LastProcess = 0
+local ProcessInterval = 0.3
+local MaxPerCycle = 20
+
+local function IsIgnored(Inst)
+    if not Inst or not Inst.Parent then
+        return true
+    end
+
+    if Inst:IsDescendantOf(Players) then
+        return true
+    end
+
+    if type(_G.Ignore) == "table" then
+        for _, Ignored in ipairs(_G.Ignore) do
+            if Ignored and (Inst == Ignored or Inst:IsDescendantOf(Ignored)) then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
+local function QueueInstance(Inst)
+    if not Active or not Inst or Processed[Inst] or PendingSet[Inst] then
+        return
+    end
+
+    PendingSet[Inst] = true
+    Pending[#Pending + 1] = Inst
+end
+
+local function ProcessInstance(Inst)
+    if not Active or IsIgnored(Inst) then
+        return
+    end
+
+    Processed[Inst] = true
+end
+
+local function ProcessQueue()
+    if not Active then
+        return
+    end
+
+    local Count = 0
+
+    while QueueIndex <= #Pending and Count < MaxPerCycle do
+        local Inst = Pending[QueueIndex]
+
+        Pending[QueueIndex] = nil
+        QueueIndex += 1
+        PendingSet[Inst] = nil
+
+        ProcessInstance(Inst)
+        Count += 1
+    end
+
+    if QueueIndex > #Pending then
+        Pending = {}
+        QueueIndex = 1
+    end
+end
+
+local function Enable()
+    if Active then
+        return
+    end
+
+    Active = true
+    Processed = setmetatable({}, {__mode = "k"})
+    Pending = {}
+    PendingSet = setmetatable({}, {__mode = "k"})
+    QueueIndex = 1
+    LastProcess = os.clock()
+
+    for _, Inst in ipairs(workspace:GetDescendants()) do
+        QueueInstance(Inst)
+    end
+
+    Connections.DescendantAdded = workspace.DescendantAdded:Connect(QueueInstance)
+
+    Connections.Heartbeat = RunService.Heartbeat:Connect(function()
+        if not Active then
+            return
+        end
+
+        local Now = os.clock()
+
+        if Now - LastProcess >= ProcessInterval then
+            LastProcess = Now
+            ProcessQueue()
+        end
+    end)
+end
+
+local function Disable()
+    if not Active then
+        return
+    end
+
+    Active = false
+
+    for _, Connection in pairs(Connections) do
+        if Connection then
+            Connection:Disconnect()
+        end
+    end
+
+    Connections = {}
+    Pending = {}
+    PendingSet = setmetatable({}, {__mode = "k"})
+    Processed = setmetatable({}, {__mode = "k"})
+    QueueIndex = 1
+end
+
+return function(State)
+    if State then
+        Enable()
+    else
+        Disable()
+    end
+end
