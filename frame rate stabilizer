@@ -1,33 +1,51 @@
+
 local RunService = game:GetService("RunService")
 
 local Active = false
 local Connection
-local LastUpdate = 0
-local LowFPSCount = 0
-local StableFPSCount = 0
 
 local TargetFPS = 999
+local LowThreshold = 50
+local RecoveryThreshold = 100
+
 local CheckInterval = 2
-local LowThreshold = 45
-local RecoveryThreshold = 90
+local LowFPSCount = 0
+local StableFPSCount = 0
+local LastUpdate = 0
 
 local OriginalQuality
 local CurrentQuality
+local QualityLevels = Enum.QualityLevel:GetEnumItems()
 
-local function GetQuality()
-    local Success, Value = pcall(function()
-        return settings().Rendering.QualityLevel
-    end)
+table.sort(QualityLevels, function(A, B)
+    return A.Value < B.Value
+end)
 
-    if Success then
-        return Value
+local function GetQualityIndex(Value)
+    for Index, Quality in ipairs(QualityLevels) do
+        if Quality.Value == Value.Value then
+            return Index
+        end
     end
 end
 
-local function SetQuality(Value)
-    pcall(function()
-        settings().Rendering.QualityLevel = Value
+local function SetQuality(Index)
+    local Quality = QualityLevels[Index]
+
+    if not Quality then
+        return false
+    end
+
+    local Success = pcall(function()
+        settings().Rendering.QualityLevel = Quality
     end)
+
+    if Success then
+        CurrentQuality = Quality
+        return true
+    end
+
+    return false
 end
 
 local function Enable()
@@ -35,20 +53,24 @@ local function Enable()
         return
     end
 
-    OriginalQuality = GetQuality()
+    local Success, Quality = pcall(function()
+        return settings().Rendering.QualityLevel
+    end)
 
-    if not OriginalQuality then
+    if not Success or not Quality then
         return
     end
 
-    CurrentQuality = OriginalQuality
+    OriginalQuality = Quality
+    CurrentQuality = Quality
+
     Active = true
-    LastUpdate = 0
     LowFPSCount = 0
     StableFPSCount = 0
+    LastUpdate = os.clock()
 
     Connection = RunService.RenderStepped:Connect(function(DeltaTime)
-        if not Active then
+        if not Active or DeltaTime <= 0 then
             return
         end
 
@@ -60,7 +82,7 @@ local function Enable()
 
         LastUpdate = Now
 
-        local FPS = 1 / math.max(DeltaTime, 0.001)
+        local FPS = 1 / DeltaTime
 
         if FPS < LowThreshold then
             LowFPSCount += 1
@@ -73,15 +95,22 @@ local function Enable()
             StableFPSCount = 0
         end
 
+        local CurrentIndex = GetQualityIndex(CurrentQuality)
+
+        if not CurrentIndex then
+            return
+        end
+
         if LowFPSCount >= 2 then
-            local NewQuality = math.max(1, CurrentQuality.Value - 1)
-            CurrentQuality = Enum.QualityLevel.NewQuality
-            SetQuality(CurrentQuality)
+            SetQuality(math.max(1, CurrentIndex - 1))
             LowFPSCount = 0
         elseif StableFPSCount >= 5 then
-            local NewQuality = math.min(10, CurrentQuality.Value + 1)
-            CurrentQuality = Enum.QualityLevel.NewQuality
-            SetQuality(CurrentQuality)
+            local OriginalIndex = GetQualityIndex(OriginalQuality)
+
+            if OriginalIndex then
+                SetQuality(math.min(OriginalIndex, CurrentIndex + 1))
+            end
+
             StableFPSCount = 0
         end
     end)
@@ -100,11 +129,15 @@ local function Disable()
     end
 
     if OriginalQuality then
-        SetQuality(OriginalQuality)
+        pcall(function()
+            settings().Rendering.QualityLevel = OriginalQuality
+        end)
     end
 
     OriginalQuality = nil
     CurrentQuality = nil
+    LowFPSCount = 0
+    StableFPSCount = 0
 end
 
 return function(State)
