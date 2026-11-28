@@ -1,47 +1,159 @@
 
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-
 local Env = (getgenv and getgenv()) or _G
 local Manager = Env.JOSHZZ_SHARED_EFFECT_MANAGER
 
 local Owner = "TextureStreamingHelper"
 local Active = false
-local MaxDistance = 350
-local UpdateInterval = 1
 
+local MaxDistance = 350
+local MaxDistanceSquared = MaxDistance * MaxDistance
+
+local ScanBatch = 120
+local UpdateBatch = 80
+local BatchDelay = 0.05
+
+local Queue = {}
+local QueueIndex = 1
+local QueueTail = 0
+
+local Seen = setmetatable({}, {__mode = "k"})
 local Tracked = {}
+local TrackedList = {}
+local TrackedIndex = {}
+local Hidden = {}
+
 local AddedConnection
-local LoopThread
+local Worker
 
 local function IsTexture(Instance)
     return Instance:IsA("Decal") or Instance:IsA("Texture")
-end
-
-local function GetPosition(Instance)
-    local Parent = Instance.Parent
-
-    if Parent and Parent:IsA("BasePart") then
-        return Parent.Position
-    end
-
-    return nil
 end
 
 local function GetOwner(Instance)
     return Owner .. "_" .. tostring(Instance)
 end
 
-local function ProcessInstance(Instance)
-    if not Active or not IsTexture(Instance) then
+local function QueueInstance(Instance)
+    if not Active or not Instance or Seen[Instance] then
         return
     end
 
-    if Tracked[Instance] then
+    Seen[Instance] = true
+    QueueTail += 1
+    Queue[QueueTail] = Instance
+end
+
+local function TrackInstance(Instance)
+    if not IsTexture(Instance) or Tracked[Instance] then
         return
     end
 
     Tracked[Instance] = true
+
+    local Index = #TrackedList + 1
+
+    TrackedList[Index] = Instance
+    TrackedIndex[Instance] = Index
+end
+
+local function RemoveInstance(Instance)
+    local InstanceOwner = GetOwner(Instance)
+
+    if Hidden[Instance] then
+        pcall(function()
+            Manager:ReleaseOwner(InstanceOwner)
+        end)
+
+        Hidden[Instance] = nil
+    end
+
+    local Index = TrackedIndex[Instance]
+
+    if Index then
+        local LastIndex = #TrackedList
+        local LastInstance = TrackedList[LastIndex]
+
+        TrackedList[Index] = LastInstance
+        TrackedList[LastIndex] = nil
+
+        if LastInstance and LastInstance ~= Instance then
+            TrackedIndex[LastInstance] = Index
+        end
+    end
+
+    TrackedIndex[Instance] = nil
+    Tracked[Instance] = nil
+end
+
+local function UpdateInstance(Instance, CameraPosition)
+    if not Instance.Parent then
+        RemoveInstance(Instance)
+        return
+    end
+
+    local Parent = Instance.Parent
+
+    if not Parent or not Parent:IsA("BasePart") then
+        RemoveInstance(Instance)
+        return
+    end
+
+    local Offset = CameraPosition - Parent.Position
+    local DistanceSquared = Offset:Dot(Offset)
+
+    local InstanceOwner = GetOwner(Instance)
+
+    if DistanceSquared > MaxDistanceSquared then
+        if not Hidden[Instance] then
+            local Success = pcall(function()
+                Manager:Claim(
+                    InstanceOwner,
+                    Instance,
+                    "Transparency",
+                    1
+                )
+            end)
+
+            if Success then
+                Hidden[Instance] = true
+            end
+        end
+    elseif Hidden[Instance] then
+        pcall(function()
+            Manager:ReleaseOwner(InstanceOwner)
+        end)
+
+        Hidden[Instance] = nil
+    end
+end
+
+local function ProcessQueue()
+    local Count = 0
+
+    while Active and QueueIndex <= QueueTail and Count < ScanBatch do
+        local Instance = Queue[QueueIndex]
+
+        Queue[QueueIndex] = nil
+        QueueIndex += 1
+
+        if Instance then
+            if Instance.Parent then
+                TrackInstance(Instance)
+
+                for _, Child in ipairs(Instance:GetChildren()) do
+                    QueueInstance(Child)
+                end
+            end
+        end
+
+        Count += 1
+    end
+
+    if QueueIndex > QueueTail then
+        table.clear(Queue)
+        QueueIndex = 1
+        QueueTail = 0
+    end
 end
 
 local function UpdateTextures()
@@ -52,25 +164,24 @@ local function UpdateTextures()
     end
 
     local CameraPosition = Camera.CFrame.Position
+    local Count = 0
+    local Index = 1
 
-    for Instance in pairs(Tracked) do
-        if not Instance.Parent then
-            Manager:ReleaseOwner(GetOwner(Instance))
-            Tracked[Instance] = nil
-        else
-            local Position = GetPosition(Instance)
+    while Active and Index <= #TrackedList and Count < UpdateBatch do
+        local Instance = TrackedList[Index]
 
-            if Position then
-                local Distance = (CameraPosition - Position).Magnitude
-                local InstanceOwner = GetOwner(Instance)
-
-                if Distance > MaxDistance then
-                    Manager:Claim(InstanceOwner, Instance, "Transparency", 1)
-                else
-                    Manager:ReleaseOwner(InstanceOwner)
-                end
-            end
+        if Instance then
+            UpdateInstance(Instance, CameraPosition)
         end
+
+        Index += 1
+        Count += 1
+    end
+
+    if Index > #TrackedList then
+        UpdateTextures.Index = 1
+    else
+        UpdateTextures.Index = Index
     end
 end
 
@@ -86,16 +197,54 @@ local function Enable()
 
     Active = true
 
-    for _, Instance in ipairs(workspace:GetDescendants()) do
-        ProcessInstance(Instance)
+    table.clear(Queue)
+    table.clear(Tracked)
+    table.clear(TrackedList)
+    table.clear(TrackedIndex)
+    table.clear(Hidden)
+
+    QueueIndex = 1
+    QueueTail = 0
+    UpdateTextures.Index = 1
+
+    for _, Instance in ipairs(workspace:GetChildren()) do
+        QueueInstance(Instance)
     end
 
-    AddedConnection = workspace.DescendantAdded:Connect(ProcessInstance)
+    AddedConnection = workspace.DescendantAdded:Connect(QueueInstance)
 
-    LoopThread = task.spawn(function()
+    Worker = task.spawn(function()
         while Active do
-            UpdateTextures()
-            task.wait(UpdateInterval)
+            ProcessQueue()
+
+            local Camera = workspace.CurrentCamera
+
+            if Camera then
+                local CameraPosition = Camera.CFrame.Position
+                local Count = 0
+
+                while Active and Count < UpdateBatch do
+                    local Index = UpdateTextures.Index
+                    local Instance = TrackedList[Index]
+
+                    if not Instance then
+                        UpdateTextures.Index = 1
+                        break
+                    end
+
+                    UpdateInstance(Instance, CameraPosition)
+
+                    UpdateTextures.Index = Index + 1
+                    Count += 1
+
+                    if UpdateTextures.Index > #TrackedList then
+                        UpdateTextures.Index = 1
+                        break
+                    end
+                end
+            end
+
+            task.wait(BatchDelay)
         end
     end)
 end
@@ -112,12 +261,23 @@ local function Disable()
         AddedConnection = nil
     end
 
-    for Instance in pairs(Tracked) do
-        Manager:ReleaseOwner(GetOwner(Instance))
+    for Instance in pairs(Hidden) do
+        pcall(function()
+            Manager:ReleaseOwner(GetOwner(Instance))
+        end)
     end
 
+    table.clear(Queue)
     table.clear(Tracked)
-    LoopThread = nil
+    table.clear(TrackedList)
+    table.clear(TrackedIndex)
+    table.clear(Hidden)
+
+    QueueIndex = 1
+    QueueTail = 0
+    UpdateTextures.Index = 1
+
+    Worker = nil
 end
 
 return function(State)
